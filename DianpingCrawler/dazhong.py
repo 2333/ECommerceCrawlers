@@ -32,7 +32,8 @@ class DianpingComment:
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36',
         }
         self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(shop_id)
-        self._cur_request_css_url = 'http://www.dianping.com/shop/{}/'.format(shop_id)
+        #self._cur_request_css_url = 'http://www.dianping.com/shop/{}/'.format(shop_id)
+        self._cur_request_css_url = 'http://www.dianping.com/shop/{}/review_all'.format(shop_id)
 
     def _delay_func(self):
         delay_time = random.randint((self._delay - 2) * 10, (self._delay + 2) * 10) * 0.1
@@ -50,7 +51,7 @@ class DianpingComment:
         """
         res = requests.get(self._cur_request_css_url, headers=self._default_headers, cookies=self._cookies)
         html = res.text
-        print('首页源码',html)
+        print('首页源码',self._cur_request_css_url, html)
         # css_link = re.search(r'<link re.*?css.*?href="(.*?svgtextcss.*?)">', html)
         css_link = re.findall(r'<link rel="stylesheet" type="text/css" href="//s3plus.meituan.net/v1/(.*?)">', html)
         assert css_link
@@ -105,11 +106,21 @@ class DianpingComment:
         background_image_link = re.findall(r'background-image: url\((.*?)\);', html)
         print('带有svg的链接', background_image_link)
         assert background_image_link
-        background_image_link = 'http:' + background_image_link[0]
+        # background_image_link = 'http:' + background_image_link[0]
+        # html = re.sub(r'span.*?\}', '', html)
+        # group_offset_list = re.findall(r'\.([a-zA-Z0-9]{5,6}).*?round:(.*?)px (.*?)px;', html)  # css中的类
+        # print('css中class对应坐标', group_offset_list)
+        # font_dict_by_offset = self._get_font_dict_by_offset(background_image_link)  # svg得到这里面对应成字典
+        # print('解析svg成字典', font_dict_by_offset)
+        
+        # 原版只解析一个svg文件，少了很多字，尝试循环处理
         html = re.sub(r'span.*?\}', '', html)
         group_offset_list = re.findall(r'\.([a-zA-Z0-9]{5,6}).*?round:(.*?)px (.*?)px;', html)  # css中的类
         print('css中class对应坐标', group_offset_list)
-        font_dict_by_offset = self._get_font_dict_by_offset(background_image_link)  # svg得到这里面对应成字典
+        font_dict_by_offset = {}
+        for i in background_image_link:
+            link = 'http:' + i
+            font_dict_by_offset.update(self._get_font_dict_by_offset(link))  # svg得到这里面对应成字典
         print('解析svg成字典', font_dict_by_offset)
 
 
@@ -170,15 +181,16 @@ class DianpingComment:
             res = requests.get(self._cur_request_url, headers=self._default_headers, cookies=self._cookies)
             html = res.text
             class_set = set()
-            for span in re.findall(r'<span class="([a-zA-Z0-9]{5,6})"></span>', html):
-                class_set.add(span)
+            for svgmtsi in re.findall(r'<svgmtsi class="([a-zA-Z0-9]{5,6})"></svgmtsi>', html):
+                class_set.add(svgmtsi)
             for class_name in class_set:
-                html = re.sub('<span class="%s"></span>' % class_name, self._font_dict[class_name], html)
+                html = re.sub('<svgmtsi class="%s"></svgmtsi>' % class_name, self._font_dict[class_name], html)
             doc = etree.HTML(html)
             self._parse_comment_page(doc)
             try:
                 self._default_headers['Referer'] = self._cur_request_url
                 next_page_url = 'http://www.dianping.com' + doc.xpath('.//a[@class="NextPage"]/@href')[0]
+                assert next_page_url, IndexError
             except IndexError:
                 next_page_url = None
             self._cur_request_url = next_page_url
@@ -191,6 +203,8 @@ class DianpingComment:
 
 
 if __name__ == "__main__":
-    COOKIES = '换上你自己的cookie_lxsdk_cuid=1699b152d90c8-04b0e0-1699b152d91c8; _lxsdk=1699b481697-541f3415-1fa400-152d91c8; _hc.v=992d8c67-a9b0-ee61-c6cf-ed9b42cfe11f.1553085051; ctu=cc29f77c02b4556c6a1db1c67c5c10e084f7f63d00208c59788c11a4845348aa; ua=aJay13; aburl=1; s_ViewType=10; Hm_lvt_e6f449471d3527d58c46e24efb4c343e=1557817381; Hm_lvt_dbeeb675516927da776beeb1d9802bd4=1559535631; cy=10; cye=tianjin; uamo=15993248973; dper=af0e70c61c6f98289269ed0f03b97c48a420a5b5ea2e1e33a40ee88662a6acd6a28707ba4a125f2cf0cb043e4d8dc66939c01b24752bfe3aeb807f53c3b411b50117cf5195d1fe2e7db9d1074b85ca4cd0720e1d8f71fc229d3eb6eb5d9df07b; ll=7fd06e815b796be3df069dec7836c3df; _lxsdk_s=16b6c84fcbc-234-e0d-4d4%7C%7C417'
-    dp = DianpingComment('412xx21', cookies=COOKIES)
+    # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
+    COOKIES = "_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; dper=4d8b99bbef215955471f0bb8c29edd3ddb06db51e42b96563370debd83c0b1729f00d0d7b6c027fd689d02d09cf6a447dee82ca80c76af0787548c1c5b65336a0483737ac9c46a8ab3d9c1d5c38fbac841f0f7ae22351cb2134071e7d9b69247; fspop=test; cy=2; cye=beijing; dplet=d2d60070f5bdcfd4a0e1f581fad2c121; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606287138; _lxsdk_s=175fe1d187b-167-7a2-3f0%7C%7C648"
+    
+    dp = DianpingComment('H3DO696t226OvUEG', cookies=COOKIES)
     dp.run()
