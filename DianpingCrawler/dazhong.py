@@ -9,16 +9,28 @@ import datetime
 import random
 import re
 import time
+import redis
 
 import requests
 from lxml import etree
 
+
+Break_Point= "resume_break_point"
 
 class DianpingComment:
     font_size = 14
     start_y = 23
 
     def __init__(self, shop_id, cookies, delay=7):
+        redis_host = "127.0.0.1"
+        redis_port = 6379
+        redis_pass = None
+
+        if redis_pass:
+            pool = redis.ConnectionPool(host=redis_host, port=redis_port, password=redis_pass, decode_responses=True)
+        else:
+            pool = redis.ConnectionPool(host=redis_host, port=redis_port, decode_responses=True)
+        self.r = redis.Redis(connection_pool=pool)
         self.shop_id = shop_id
         self._delay = delay
         self.font_dict = {}
@@ -31,9 +43,14 @@ class DianpingComment:
             'Host': 'www.dianping.com',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36',
         }
-        self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(shop_id)
+        
+        if self.r.hexists(Break_Point, shop_id):
+            self._cur_request_url = self.r.hget(Break_Point, shop_id)
+        else:
+            self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(shop_id)
         #self._cur_request_css_url = 'http://www.dianping.com/shop/{}/'.format(shop_id)
         self._cur_request_css_url = 'http://www.dianping.com/shop/{}/review_all'.format(shop_id)
+        
 
     def _delay_func(self):
         delay_time = random.randint((self._delay - 2) * 10, (self._delay + 2) * 10) * 0.1
@@ -137,6 +154,9 @@ class DianpingComment:
         """
             处理数据
         """
+        if self.r.hexists("comment", self.shop_id):
+            data = data.update(self.r.hget("comment", self.shop_id))
+        self.r.hset("comment", self.shop_id, data)
         print('最终数据:',data)
 
     def _parse_comment_page(self, doc):
@@ -191,6 +211,7 @@ class DianpingComment:
                 self._default_headers['Referer'] = self._cur_request_url
                 next_page_url = 'http://www.dianping.com' + doc.xpath('.//a[@class="NextPage"]/@href')[0]
                 assert next_page_url, IndexError
+                self.r.hset(Break_Point, self.shop_id, next_page_url)
             except IndexError:
                 next_page_url = None
             self._cur_request_url = next_page_url
@@ -204,7 +225,7 @@ class DianpingComment:
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
-    COOKIES = "_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; dper=4d8b99bbef215955471f0bb8c29edd3ddb06db51e42b96563370debd83c0b1729f00d0d7b6c027fd689d02d09cf6a447dee82ca80c76af0787548c1c5b65336a0483737ac9c46a8ab3d9c1d5c38fbac841f0f7ae22351cb2134071e7d9b69247; fspop=test; cy=2; cye=beijing; dplet=d2d60070f5bdcfd4a0e1f581fad2c121; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606287138; _lxsdk_s=175fe1d187b-167-7a2-3f0%7C%7C648"
+    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=1761f19a920-a45-5df-037%7C%7C196; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606840484"
     
-    dp = DianpingComment('H3DO696t226OvUEG', cookies=COOKIES)
+    dp = DianpingComment('G1jsmNXCBNyGFcV6', cookies=COOKIES)
     dp.run()
