@@ -10,6 +10,7 @@ import random
 import re
 import time
 import redis
+import json
 
 import requests
 from lxml import etree
@@ -147,16 +148,18 @@ class DianpingComment:
             # print(y_offset,x_offset)
             if font_dict_by_offset.get(int(y_offset)):
                 self.font_dict[class_name] = font_dict_by_offset[int(y_offset)][int(x_offset)]
-
+        # special treat
+        self.font_dict['zltswc']='工'
         return self.font_dict
 
     def _data_pipeline(self, data):
         """
             处理数据
         """
-        if self.r.hexists("comment", self.shop_id):
-            data = data.update(self.r.hget("comment", self.shop_id))
-        self.r.hset("comment", self.shop_id, data)
+        if self.r.llen(self.shop_id) > 0 and data is not None:
+            self.r.rpushx(self.shop_id, json.dumps(data))
+        else:
+            self.r.rpush(self.shop_id, json.dumps(data))
         print('最终数据:',data)
 
     def _parse_comment_page(self, doc):
@@ -172,12 +175,12 @@ class DianpingComment:
             except IndexError:
                 star = 0
             time = li.xpath('.//span[@class="time"]/text()')[0].strip('\n\r \t')
-            pics = []
+            # pics = []
 
-            if li.xpath('.//*[@class="review-pictures"]/ul/li'):
-                for pic in li.xpath('.//*[@class="review-pictures"]/ul/li'):
-                    print(pic.xpath('.//a/@href'))
-                    pics.append(pic.xpath('.//a/img/@data-big')[0])
+            # if li.xpath('.//*[@class="review-pictures"]/ul/li'):
+            #     for pic in li.xpath('.//*[@class="review-pictures"]/ul/li'):
+            #         print(pic.xpath('.//a/@href'))
+            #         pics.append(pic.xpath('.//a/img/@data-big')[0])
             comment = ''.join(li.xpath('.//div[@class="review-words Hide"]/text()')).strip('\n\r \t')
             if not comment:
                 comment = ''.join(li.xpath('.//div[@class="review-words"]/text()')).strip('\n\r \t')
@@ -186,7 +189,7 @@ class DianpingComment:
                 'name': name,
                 'comment': comment,
                 'star': star,
-                'pic': pics,
+                # 'pic': pics,
                 'time': time,
             }
             self._data_pipeline(data)
@@ -214,6 +217,7 @@ class DianpingComment:
                 self.r.hset(Break_Point, self.shop_id, next_page_url)
             except IndexError:
                 next_page_url = None
+                print("需要验证了")
             self._cur_request_url = next_page_url
 
     def run(self):
@@ -225,7 +229,7 @@ class DianpingComment:
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
-    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=1761f19a920-a45-5df-037%7C%7C196; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606840484"
-    
+    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; dper=fa570d65328c5eab22bf438242022c5366fcd18309aad9c422af538d03b4e42cae77ad7d87593577c2767b69e74e77392feea21c89309d47915f13b6c812073288c436b4f2d352590229edc337ad23ec05a0ad44243df5917d487037dd141482; dplet=a6668709da2b5fa599e8f416e69f5f3a; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606917576; _lxsdk_s=17623baef79-132-4cf-490%7C%7C815"
+
     dp = DianpingComment('G1jsmNXCBNyGFcV6', cookies=COOKIES)
     dp.run()
