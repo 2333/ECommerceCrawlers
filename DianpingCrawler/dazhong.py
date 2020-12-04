@@ -32,6 +32,9 @@ class DianpingComment:
         else:
             pool = redis.ConnectionPool(host=redis_host, port=redis_port, decode_responses=True)
         self.r = redis.Redis(connection_pool=pool)
+        
+        self.shop_name = None
+
         self.shop_id = shop_id
         self._delay = delay
         self.font_dict = {}
@@ -69,7 +72,7 @@ class DianpingComment:
         """
         res = requests.get(self._cur_request_css_url, headers=self._default_headers, cookies=self._cookies)
         html = res.text
-        print('首页源码',self._cur_request_css_url, html)
+        # print('首页源码',self._cur_request_css_url, html)
         # css_link = re.search(r'<link re.*?css.*?href="(.*?svgtextcss.*?)">', html)
         css_link = re.findall(r'<link rel="stylesheet" type="text/css" href="//s3plus.meituan.net/v1/(.*?)">', html)
         assert css_link
@@ -122,7 +125,7 @@ class DianpingComment:
         html = res.text
 
         background_image_link = re.findall(r'background-image: url\((.*?)\);', html)
-        print('带有svg的链接', background_image_link)
+        # print('带有svg的链接', background_image_link)
         assert background_image_link
         # background_image_link = 'http:' + background_image_link[0]
         # html = re.sub(r'span.*?\}', '', html)
@@ -134,7 +137,7 @@ class DianpingComment:
         # 原版只解析一个svg文件，少了很多字，尝试循环处理
         html = re.sub(r'span.*?\}', '', html)
         group_offset_list = re.findall(r'\.([a-zA-Z0-9]{5,6}).*?round:(.*?)px (.*?)px;', html)  # css中的类
-        print('css中class对应坐标', group_offset_list)
+        # print('css中class对应坐标', group_offset_list)
         font_dict_by_offset = {}
         for i in background_image_link:
             link = 'http:' + i
@@ -150,6 +153,7 @@ class DianpingComment:
                 self.font_dict[class_name] = font_dict_by_offset[int(y_offset)][int(x_offset)]
         # special treat
         self.font_dict['zltswc']='工'
+        self.font_dict['zuc30h']='堆'
         return self.font_dict
 
     def _data_pipeline(self, data):
@@ -159,8 +163,15 @@ class DianpingComment:
         if self.r.llen(self.shop_id) > 0 and data is not None:
             self.r.rpushx(self.shop_id, json.dumps(data))
         else:
+            if isinstance(data, str):
+                self.r.rpush(self.shop_id, data)
             self.r.rpush(self.shop_id, json.dumps(data))
         print('最终数据:',data)
+
+    def _parse_shop_name(self, doc):
+        data = doc.xpath('.//h1[@class="shop-name"]/text()')[0].strip('\n\r \t')
+        self.shop_name = data
+        self._data_pipeline(data)
 
     def _parse_comment_page(self, doc):
         """
@@ -175,12 +186,12 @@ class DianpingComment:
             except IndexError:
                 star = 0
             time = li.xpath('.//span[@class="time"]/text()')[0].strip('\n\r \t')
-            # pics = []
+            pics = []
 
-            # if li.xpath('.//*[@class="review-pictures"]/ul/li'):
-            #     for pic in li.xpath('.//*[@class="review-pictures"]/ul/li'):
-            #         print(pic.xpath('.//a/@href'))
-            #         pics.append(pic.xpath('.//a/img/@data-big')[0])
+            if li.xpath('.//*[@class="review-pictures"]/ul/li'):
+                for pic in li.xpath('.//*[@class="review-pictures"]/ul/li'):
+                    print(pic.xpath('.//a/@href'))
+                    pics.append(pic.xpath('.//a/img/@data-big')[0])
             comment = ''.join(li.xpath('.//div[@class="review-words Hide"]/text()')).strip('\n\r \t')
             if not comment:
                 comment = ''.join(li.xpath('.//div[@class="review-words"]/text()')).strip('\n\r \t')
@@ -189,7 +200,7 @@ class DianpingComment:
                 'name': name,
                 'comment': comment,
                 'star': star,
-                # 'pic': pics,
+                'pic': pics,
                 'time': time,
             }
             self._data_pipeline(data)
@@ -209,6 +220,8 @@ class DianpingComment:
             for class_name in class_set:
                 html = re.sub('<svgmtsi class="%s"></svgmtsi>' % class_name, self._font_dict[class_name], html)
             doc = etree.HTML(html)
+            if not self.shop_name:
+                self._parse_shop_name(doc)
             self._parse_comment_page(doc)
             try:
                 self._default_headers['Referer'] = self._cur_request_url
@@ -229,7 +242,7 @@ class DianpingComment:
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
-    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; dper=fa570d65328c5eab22bf438242022c5366fcd18309aad9c422af538d03b4e42cae77ad7d87593577c2767b69e74e77392feea21c89309d47915f13b6c812073288c436b4f2d352590229edc337ad23ec05a0ad44243df5917d487037dd141482; dplet=a6668709da2b5fa599e8f416e69f5f3a; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606917576; _lxsdk_s=17623baef79-132-4cf-490%7C%7C815"
+    COOKIES = "_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; cy=2; cye=beijing; fspop=test; dper=022fa2ad44610b5e37024b1615ecb04ac47d1678fae741493b0de25b4406d2c5478e37f3a1efe0319b43ab2e6e2c6ee63ed07b70bd6a8c9119f05cade05e0c4b48c176dad063a37e1c7e971818f5781b689fbffa43d97a15d4cb1cdfc009e440; dplet=e5fe0ae819828271bbacb71bad5c72b2; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607059444; _lxsdk_s=1762c34b710-e63-a45-1d0%7C%7C127"
 
-    dp = DianpingComment('G1jsmNXCBNyGFcV6', cookies=COOKIES)
+    dp = DianpingComment('Gan2t5dJgCEDL2YC', cookies=COOKIES)
     dp.run()
