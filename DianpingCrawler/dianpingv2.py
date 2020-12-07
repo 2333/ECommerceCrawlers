@@ -24,7 +24,7 @@ class DianpingComment:
     font_size = 14
     start_y = 23
 
-    def __init__(self, shop_id, cookies, delay=7):
+    def __init__(self, keyword, cookies, delay=7):
         redis_host = "127.0.0.1"
         redis_port = 6379
         redis_pass = None
@@ -36,7 +36,7 @@ class DianpingComment:
         self.r = redis.Redis(connection_pool=pool)
 
         self.shop_name = None
-        self.shop_id = shop_id
+        # self.shop_id = shop_id
         self._delay = delay
         self.font_dict = {}
         self._cookies = self._format_cookies(cookies)
@@ -48,19 +48,19 @@ class DianpingComment:
             'Host': 'www.dianping.com',
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.110 Safari/537.36',
         }
-        # self._cur_key_url = 'http://www.dianping.com/search/keyword/2/0_{}'.format(keyword)
+        self._cur_key_url = 'http://www.dianping.com/search/keyword/2/0_{}'.format(keyword)
         
         if self.r.llen(Shop_Point) > 0:
             self._cur_shop_url = self.r.lpop(Shop_Point)
         else:
             self._cur_shop_url = ''
         
-        if self.r.hexists(Break_Point, shop_id):
-            self._cur_request_url = self.r.hget(Break_Point, shop_id)
-        else:
-            self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(shop_id)
-        #self._cur_request_css_url = 'http://www.dianping.com/shop/{}/'.format(shop_id)
-        self._cur_request_css_url = 'http://www.dianping.com/shop/{}/review_all'.format(shop_id)
+        # if self.r.hexists(Break_Point, shop_id):
+        #     self._cur_request_url = self.r.hget(Break_Point, shop_id)
+        # else:
+        #     self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(shop_id)
+        # #self._cur_request_css_url = 'http://www.dianping.com/shop/{}/'.format(shop_id)
+        # self._cur_request_css_url = 'http://www.dianping.com/shop/{}/review_all'.format(shop_id)
         
 
     def _delay_func(self):
@@ -241,17 +241,29 @@ class DianpingComment:
                 print("找不到下一页：{}".format(e))
                 self._cur_request_url = None
             
+    def _get_shop_url_list(self):
+        """
+        获取关键字所有店铺的url列表
+        """
+        while(self._cur_request_url):
+            res = requests.get(self._cur_key_url, headers=self._default_headers, cookies=self._cookies)
+            html = res.text
+            doc = etree.HTML(html)
+            shop_list=[]
+            for li in doc.xpath('//*[@class="shop-list J_shop-list shop-all-list"]/ul/li'):
+                shop_list.append(li.xpath('.//a/@href')[0])
 
     def run(self):
-        self._css_link = self._get_css_link(self._cur_request_url)
-        print('css 的连接', self._css_link)
-        self._font_dict = self._get_font_dict(self._css_link)
-        self._get_conment_page()
+        self._get_shop_url_list()
+        # self._css_link = self._get_css_link(self._cur_request_url)
+        # print('css 的连接', self._css_link)
+        # self._font_dict = self._get_font_dict(self._css_link)
+        # self._get_conment_page()
 
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
     COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; dper=5b64bf52184d0e5b94eeeb89a15425d4e1229add93388e3c89921ddd681b410198b5d19c660d3a1127a43951737b2873a452e4c31c3d5dfef9eff1c1a7a0769ae8175459332a7a4defe3eefd6303c1c5b9575f1df59fa2f3efda0ebf83df0b10; dplet=8c628f33a4d58634cc34dc4e075beb8e; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607349307; _lxsdk_s=1763d79848a-34a-437-18a%7C%7C167"
 
-    dp = DianpingComment('k9ziup0O6kGmRav3', cookies=COOKIES)
+    dp = DianpingComment('哈根达斯', cookies=COOKIES)
     dp.run()
