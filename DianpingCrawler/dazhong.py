@@ -30,9 +30,9 @@ class DianpingComment:
         redis_pass = None
 
         if redis_pass:
-            pool = redis.ConnectionPool(host=redis_host, port=redis_port, password=redis_pass, decode_responses=True)
+            pool = redis.ConnectionPool(host=redis_host, port=redis_port, password=redis_pass, decode_responses=True, socket_connect_timeout=5)
         else:
-            pool = redis.ConnectionPool(host=redis_host, port=redis_port, decode_responses=True)
+            pool = redis.ConnectionPool(host=redis_host, port=redis_port, decode_responses=True, socket_connect_timeout=5)
         self.r = redis.Redis(connection_pool=pool)
 
         self.shop_name = None
@@ -161,9 +161,9 @@ class DianpingComment:
             if font_dict_by_offset.get(int(y_offset)):
                 self.font_dict[class_name] = font_dict_by_offset[int(y_offset)][int(x_offset)]
         # special treat
-        self.font_dict['zltswc']='工'
-        self.font_dict['zuc30h']='堆'
-        self.font_dict['xl06i'] = '丁'
+        # self.font_dict['zltswc']='工'
+        # self.font_dict['zuc30h']='堆'
+        # self.font_dict['xl06i'] = '丁'
         return self.font_dict
 
     def _data_pipeline(self, data):
@@ -177,8 +177,12 @@ class DianpingComment:
         print('最终数据:',data)
 
     def _parse_shop_name(self, doc):
-        shop_name = doc.xpath('.//h1[@class="shop-name"]/text()')[0].strip('\n\r \t')
-        self.shop_name = shop_name
+        try:
+            shop_name = doc.xpath('.//h1[@class="shop-name"]/text()')[0].strip('\n\r \t')
+            self.shop_name = shop_name
+        except Exception as e:
+            print("Need validation: {}".format(e))
+        
 
     def _parse_comment_page(self, doc):
         """
@@ -251,7 +255,7 @@ class DianpingComment:
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; _lxsdk_s=175faa41390-8c9-72c-1f4%7C%7C48; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1606227914'
-    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; dper=5b64bf52184d0e5b94eeeb89a15425d4e1229add93388e3c89921ddd681b410198b5d19c660d3a1127a43951737b2873a452e4c31c3d5dfef9eff1c1a7a0769ae8175459332a7a4defe3eefd6303c1c5b9575f1df59fa2f3efda0ebf83df0b10; dplet=8c628f33a4d58634cc34dc4e075beb8e; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607349307; _lxsdk_s=1763d79848a-34a-437-18a%7C%7C167"
+    COOKIES = "_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; cy=2; cye=beijing; fspop=test; expand=yes; lgtoken=00cddb74b-47fe-41da-8d39-b7ff4abf577b; dper=5b64bf52184d0e5b94eeeb89a15425d4d7357b949024d9f0e646db58d9a7c52e0a5b6e6d5374ffe42cad051ad226c2fa8f7de391361b8e93fd922661e84401c37881c9ad8e9d79854affc73074996df14713a3fb93c43e28ef95f41338694a4a; dplet=9521d8973cf2478fdea3095dbbec37d3; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607397271; _lxsdk_s=17640576695-7e5-d51-bd9%7C%7C38"
 
-    dp = DianpingComment('k9ziup0O6kGmRav3', cookies=COOKIES)
+    dp = DianpingComment('H3DO696t226OvUEG', cookies=COOKIES)
     dp.run()
