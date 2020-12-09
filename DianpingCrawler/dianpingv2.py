@@ -6,6 +6,7 @@ __mtime__ = '2019/3/21 0021'
 
 """
 import datetime
+from json import encoder
 import random
 import re
 import time
@@ -14,6 +15,7 @@ import json
 
 import requests
 from lxml import etree
+from requests.api import post
 
 # 保存当前商店评论页的url，方便继续爬
 Break_Point = "resume_break_point"
@@ -40,6 +42,7 @@ class DianpingComment:
 
         self.shop_name = None
         self.shop_id = None
+        self.keyword = keyword
         self._delay = delay
         self.font_dict = {}
         self._cookies = self._format_cookies(cookies)
@@ -242,16 +245,15 @@ class DianpingComment:
             self._parse_comment_page(doc)
             try:
                 self._default_headers['Referer'] = self._cur_request_url
-                next_page_url = 'http://www.dianping.com' + \
-                    doc.xpath('.//a[@class="NextPage"]/@href')
-                # assert next_page_url==[], "到底了"
-                if next_page_url:
-                    self._cur_key_url = next_page_url[0]
+                postfix = doc.xpath('.//a[@class="NextPage"]/@href')
+                if postfix:
+                    postfix = postfix[0]
+                    next_page_url = 'http://www.dianping.com{}'.format(postfix)
                     self.r.hset(Break_Point, self.shop_id, next_page_url)
                     self._cur_request_url = next_page_url
                 else:
                     print("到底了")
-                    self._cur_key_url = None
+                    self._cur_request_url = None
             except Exception as e:
                 print("找不到下一页：{}".format(e))
                 self._cur_request_url = None
@@ -260,9 +262,10 @@ class DianpingComment:
         """
         获取关键字所有店铺的url列表
         """
-        shop_list = []
+        shop_dict = {}
         self.r.delete("shop_list")
         while(self._cur_key_url):
+            self._cur_key_url = self._cur_key_url.encode()
             res = requests.get(
                 self._cur_key_url, headers=self._default_headers, cookies=self._cookies)
             html = res.text
@@ -270,9 +273,11 @@ class DianpingComment:
             for li in doc.xpath('//*[@class="shop-list J_shop-list shop-all-list"]/ul/li'):
                 url = li.xpath('.//a/@href')[0]
                 name = li.xpath('.//h4/text()')[0]
+                if self.keyword not in name:
+                    continue
                 print("增加店铺url：{}, {}".format(name, url))
-                shop_list.append(url)
-                self.r.rpush("shop_list", url)
+                shop_dict = {"shop_name": name, "shop_url": url}
+                self.r.rpush("shop_list", json.dumps(shop_dict))
             try:
                 self._default_headers['Referer'] = self._cur_key_url
                 next_page_url = doc.xpath('.//a[@class="next"]/@href')
@@ -289,9 +294,11 @@ class DianpingComment:
 
     def run(self):
         self._get_shop_url_list()
-        shop_id = self.r.lpop("shop_list").split("shop/")[1]
+        shop_dict = json.loads(self.r.lpop("shop_list"))
+        shop_id = shop_dict.get("shop_url").split("shop/")[1]
         while shop_id:
             self.shop_id = shop_id
+            self.shop_name = shop_dict.get("shop_name")
             if self.r.hexists(Break_Point, shop_id):
                 self._cur_request_url = self.r.hget(Break_Point, shop_id)
             else:
@@ -304,16 +311,17 @@ class DianpingComment:
                 print('css 的连接', self._css_link)
                 self._font_dict = self._get_font_dict(self._css_link)
                 self._get_conment_page()
-                shop_id = self.r.rpop("shop_list").split("shop/")[1]
+                shop_dict = json.loads(self.r.lpop("shop_list"))
+                shop_id = shop_dict.get("shop_url").split("shop/")[1]
             except Exception as e:
                 print("店铺切换问题：{}".format(e))
-                self.r.lpush("shop_list", shop_id)
+                self.r.lpush("shop_list", json.dumps(shop_dict))
                 break
 
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; cy=2; cye=beijing; fspop=test; dper=5b64bf52184d0e5b94eeeb89a15425d4d7357b949024d9f0e646db58d9a7c52e0a5b6e6d5374ffe42cad051ad226c2fa8f7de391361b8e93fd922661e84401c37881c9ad8e9d79854affc73074996df14713a3fb93c43e28ef95f41338694a4a; dplet=8b1f7019ac18e57d3d311adb49b49b2a; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607412780; _lxsdk_s=17640e3f3c6-5f-305-7a%7C%7C800'
-    COOKIES = "_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; cy=2; cye=beijing; fspop=test; dper=5b64bf52184d0e5b94eeeb89a15425d4d7357b949024d9f0e646db58d9a7c52e0a5b6e6d5374ffe42cad051ad226c2fa8f7de391361b8e93fd922661e84401c37881c9ad8e9d79854affc73074996df14713a3fb93c43e28ef95f41338694a4a; dplet=8b1f7019ac18e57d3d311adb49b49b2a; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607412780; _lxsdk_s=17640e3f3c6-5f-305-7a%7C%7C800"
+    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; lgtoken=00a61ecb0-3af2-4d9e-9a28-ad356131a5df; dper=dfb2ffc045f604696e647765bec04a9a4a43abb55c5098856b0037b58487c18fb4ac7f592c85b8436856667f6b8e29cf838bb1c4ad0843a90a7d11ab0a02d9ea2726102e70b8019ba7d8e1a60afc3d94df5ebd43c6e60b40a5c7beee1796e5bb; dplet=7d577402984f2fc65f3a089403dc7eef; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607436587; _lxsdk_s=17642adcb2d-056-6fb-b21%7C%7C354"
 
-    dp = DianpingComment('', cookies=COOKIES)
+    dp = DianpingComment('哈根达斯', cookies=COOKIES)
     dp.run()
