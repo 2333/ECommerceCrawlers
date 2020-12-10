@@ -161,9 +161,12 @@ class DianpingComment:
             x_offset = x_offset.replace('.0', '')
             self.r.hset("font", class_name, "{},{}".format(y_offset, x_offset))
             # print(y_offset,x_offset)
-            if font_dict_by_offset.get(int(y_offset)):
-                self.font_dict[class_name] = font_dict_by_offset[int(
-                    y_offset)][int(x_offset)]
+            try:
+                if font_dict_by_offset.get(int(y_offset)):
+                    self.font_dict[class_name] = font_dict_by_offset[int(
+                        y_offset)][int(x_offset)]
+            except Exception as e:
+                print(e, class_name, y_offset, x_offset)
         # special treat
         # self.font_dict['zltswc']='工'
         # self.font_dict['zuc30h']='堆'
@@ -253,6 +256,7 @@ class DianpingComment:
                     self._cur_request_url = next_page_url
                 else:
                     print("到底了")
+                    self.r.hset(Break_Point, self.shop_id, "end")
                     self._cur_request_url = None
             except Exception as e:
                 print("找不到下一页：{}".format(e))
@@ -296,11 +300,19 @@ class DianpingComment:
         self._get_shop_url_list()
         shop_dict = json.loads(self.r.lpop("shop_list"))
         shop_id = shop_dict.get("shop_url").split("shop/")[1]
+        
         while shop_id:
             self.shop_id = shop_id
             self.shop_name = shop_dict.get("shop_name")
-            if self.r.hexists(Break_Point, shop_id):
+            # 设置断点续传
+            if self.r.hexists(Break_Point, shop_id) and self.r.hget(Break_Point, shop_id) != "end":
                 self._cur_request_url = self.r.hget(Break_Point, shop_id)
+            #说明这家店爬完了
+            elif self.r.hget(Break_Point, shop_id) == "end":
+                shop_dict = json.loads(self.r.lpop("shop_list"))
+                shop_id = shop_dict.get("shop_url").split("shop/")[1]
+                continue
+            # 说明没爬，从头开始
             else:
                 self._cur_request_url = 'http://www.dianping.com/shop/{}/review_all/p1'.format(
                     shop_id)
@@ -321,7 +333,7 @@ class DianpingComment:
 
 if __name__ == "__main__":
     # COOKIES = '_lxsdk_cuid=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _lxsdk=174140242ebc8-0124535e70043a-3323766-130980-174140242eb66; _hc.v=53d8a52e-e1b1-6a40-2c87-43ec367dfa62.1598063527; s_ViewType=10; aburl=1; __utma=1.75733673.1599534050.1599534050.1599534050.1; __utmc=1; __utmz=1.1599534050.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d87bd8a6f54991c9bcdc83ab765dd6662c; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1606267108; cy=2; cye=beijing; fspop=test; dper=5b64bf52184d0e5b94eeeb89a15425d4d7357b949024d9f0e646db58d9a7c52e0a5b6e6d5374ffe42cad051ad226c2fa8f7de391361b8e93fd922661e84401c37881c9ad8e9d79854affc73074996df14713a3fb93c43e28ef95f41338694a4a; dplet=8b1f7019ac18e57d3d311adb49b49b2a; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607412780; _lxsdk_s=17640e3f3c6-5f-305-7a%7C%7C800'
-    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1604850542,1604850620; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; fspop=test; lgtoken=00a61ecb0-3af2-4d9e-9a28-ad356131a5df; dper=dfb2ffc045f604696e647765bec04a9a4a43abb55c5098856b0037b58487c18fb4ac7f592c85b8436856667f6b8e29cf838bb1c4ad0843a90a7d11ab0a02d9ea2726102e70b8019ba7d8e1a60afc3d94df5ebd43c6e60b40a5c7beee1796e5bb; dplet=7d577402984f2fc65f3a089403dc7eef; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607436587; _lxsdk_s=17642adcb2d-056-6fb-b21%7C%7C354"
+    COOKIES = "_lxsdk_cuid=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _lxsdk=175a88be2f2c8-07dbb17c3f0c2f-163e6152-fa000-175a88be2f2c8; _hc.v=eec61957-8eac-8682-502e-3a53a9f38674.1604850541; s_ViewType=10; cy=2; cye=beijing; ll=7fd06e815b796be3df069dec7836c3df; ua=13811275737; ctu=1d3cf8bd0ab16c6c5c01abe1c3d223d84cde85741f735cebe59c31bbe3281ea7; Hm_lvt_602b80cf8079ae6591966cc70a3940e7=1607612060; _lxsdk_s=1764d251d34-bf3-323-01e%7C%7C95; Hm_lpvt_602b80cf8079ae6591966cc70a3940e7=1607612118; lgtoken=0c9649fef-04ec-41b0-b425-71ad2f7999ca; dplet=2ec024ce8c162477b7c7112d5cec3a65; dper=b7a80d79ba3cebb72ea4cd932a674ac4a7035eb96ddafb716f680006abc5f25fa6426b0cab07947e43d5c9f8f7524e7d1c937ba120b4f0bd948f488a1c1e459e0c901e88263aec8e7995ea2908dd7e5b5533704dc50193f32b90e06a0ad5c5db"
 
     dp = DianpingComment('哈根达斯', cookies=COOKIES)
     dp.run()
